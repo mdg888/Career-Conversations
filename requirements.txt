@@ -1,0 +1,7 @@
+python-dotenv==1.1.0
+openai==2.6.0
+requests==2.31.0
+pypdf==6.2.0
+gradio==4.21.0
+pydantic==2.12.0
+python-pushover==0.5
