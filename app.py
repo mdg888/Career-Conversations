@@ -111,13 +111,10 @@ class Me:
         Be professional and engaging, as if talking to a potential client or future employer who came across the website. \
         If you don't know the answer to any question, use your record_unknown_question tool to record the question that you couldn't answer, even if it's about something trivial or unrelated to career. \
         If the user is engaging in discussion, try to steer them towards getting in touch via email; ask for their email and record it using your record_user_details tool. "
-
-        # FIX: Changed 'summary' to 'self.summary'
         system_prompt += f"\n\n## Summary:\n{self.summary}\n\n## Summary Profile:\n{self.linkedin}\n\n"
         system_prompt += f"With this context, please chat with the user, always staying in character as {self.name}."
         return system_prompt
 
-    # FIX: Fixed typo 'evaluator_system_promt' to 'evaluator_system_prompt'
     def evaluator_system_prompt(self):
         evaluator_system_prompt = f"You are an evaluator that decides whether a response to a question is acceptable. \
         You are provided with a conversation between a User and an Agent. Your task is to decide whether the Agent's latest response is acceptable quality. \
@@ -127,7 +124,6 @@ class Me:
         When the Agent is using record_user_details tool make sure the agent asks the user for a name and email. \
         The Agent has been provided with context on {self.name} in the form of their profile summary. Here's the information:"
 
-        # FIX: Changed 'summary' to 'self.summary'
         evaluator_system_prompt += f"\n\n## Summary:\n{self.summary}\n\n## Profile Summary:\n{self.linkedin}\n\n"
         evaluator_system_prompt += f"With this context, please evaluate the latest response, replying with whether the response is acceptable and your feedback."
         return evaluator_system_prompt
@@ -140,10 +136,8 @@ class Me:
         return user_prompt
 
     def evaluate(self, reply, message, history) -> Evaluation:
-        # FIX: Added 'self.' before calling instance methods
         messages = [{"role": "system", "content": self.evaluator_system_prompt()}] + \
                    [{"role": "user", "content": self.evaluator_user_prompt(reply, message, history)}]
-        # FIX: Changed 'openai' to 'self.openai'
         response = self.openai.beta.chat.completions.parse(
             model="gpt-4o-mini", 
             messages=messages, 
@@ -152,12 +146,10 @@ class Me:
         return response.choices[0].message.parsed
 
     def rerun(self, reply, message, history, feedback):
-        # FIX: Changed 'system_prompt' to 'self.system_prompt()'
         updated_system_prompt = self.system_prompt() + "\n\n## Previous answer rejected\nYou just tried to reply, but the quality control rejected your reply\n"
         updated_system_prompt += f"## Your attempted answer:\n{reply}\n\n"
         updated_system_prompt += f"## Reason for rejection:\n{feedback}\n\n"
         messages = [{"role": "system", "content": updated_system_prompt}] + history + [{"role": "user", "content": message}]
-        # FIX: Changed 'openai' to 'self.openai'
         response = self.openai.chat.completions.create(model="gpt-4o-mini", messages=messages)
         return response.choices[0].message.content
 
@@ -167,7 +159,6 @@ class Me:
         done = False
         while not done:
             # This is the call to the LLM - see that we pass in the tools json
-            # FIX: Changed 'openai' to 'self.openai'
             response = self.openai.chat.completions.create(model="gpt-4o-mini", messages=messages, tools=tools)
 
             finish_reason = response.choices[0].finish_reason
