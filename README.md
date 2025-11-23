@@ -101,6 +101,12 @@ your_project/
 - **Adding More Tools**:  
   You can expand the `tools` list following the included schema to integrate additional functionality.
 
+## Hugging Face Deployed Version 
+
+Try out the chatbot **here**: [Michael's Website](https://huggingface.co/spaces/mdg8888/career_conversation)
+
+
+
 ## Security & Privacy
 
 - **Sensitive data**, such as API keys and user email addresses, are handled securely using environment variables and are never stored or displayed.
