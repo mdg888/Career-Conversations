@@ -66,7 +66,7 @@ This project is a professional conversational AI chatbot designed to represent M
 Simply run:
 
 ```bash
-python app.py
+python src/app.py
 ```
 The Gradio chat interface will launch locally in your default web browser.
 
@@ -78,27 +78,110 @@ The Gradio chat interface will launch locally in your default web browser.
 4. If it does not know the answer, the chatbot records the question via the Pushover API.
 5. Each AI answer is programmatically evaluated for relevance and quality—rejections trigger an automatic rewrite and resubmission.
 
-## File Structure (Key Files)
+## File Structure
 
 ```plaintext
-your_project/
+Career-Conversations/
 │
 ├── me/
 │   ├── profile_summary.pdf   # PDF with Michael's professional summary
 │   └── summary.txt           # Text version of Michael's summary
 │
-├── app.py       # Main Python script (provided above)
+├── src/
+│   └── app.py                # Main application script
+│
+├── tests/                    # Test files
 ├── requirements.txt          # Python dependencies
-└── .env                      # API keys (not in version control)
+├── .env                      # API keys (not in version control)
+└── .gitignore                # Git ignore rules
+```
+
+## Code Architecture
+
+### Core Components
+
+#### 1. **Tool Functions** (`record_user_details`, `record_unknown_question`)
+These functions send notifications via Pushover API when:
+- A user provides contact details (email, name, notes)
+- The chatbot encounters a question it cannot answer
+
+#### 2. **Tool Definitions** (`record_user_details_json`, `record_unknown_question_json`)
+JSON schemas that define the structure and parameters for OpenAI function calling. These tell the AI when and how to use each tool.
+
+#### 3. **Me Class**
+The main class that orchestrates the chatbot:
+
+**`__init__()`**:
+- Initializes OpenAI client
+- Loads Michael's name
+- Reads profile data from `me/profile_summary.pdf` (LinkedIn summary)
+- Reads additional context from `me/summary.txt`
+
+**`handle_tool_calls(tool_calls)`**:
+- Processes OpenAI function calls
+- Executes the appropriate Python function
+- Returns results back to the conversation
+
+**`system_prompt()`**:
+- Constructs the AI's system instructions
+- Injects Michael's profile data as context
+- Defines behavior rules (stay in character, record unknown questions, request emails)
+
+**`evaluator_system_prompt()`**:
+- Creates instructions for the quality evaluator
+- Includes Michael's profile for reference
+- Sets criteria for acceptable responses
+
+**`evaluator_user_prompt(reply, message, history)`**:
+- Formats the conversation for evaluation
+- Includes user message, AI reply, and chat history
+
+**`evaluate(reply, message, history)`**:
+- Uses GPT-4o-mini with structured output (Pydantic)
+- Returns `Evaluation` object with `is_acceptable` bool and `feedback` string
+- Quality control layer to ensure professional responses
+
+**`rerun(reply, message, history, feedback)`**:
+- Called when evaluation fails
+- Adds rejection feedback to system prompt
+- Regenerates response with improved instructions
+
+**`chat(message, history)`**:
+- Main conversation loop
+- Calls OpenAI API with tools enabled
+- Handles tool calls in a loop until completion
+- Evaluates final response
+- Reruns if evaluation fails
+- Returns final reply to user
+
+#### 4. **Gradio Interface**
+`gr.ChatInterface(me.chat).launch()` creates a web UI that:
+- Accepts user messages
+- Passes them to `me.chat()`
+- Displays AI responses
+- Manages conversation history
+
+### Data Flow
+
+```
+User Input → chat() → OpenAI API (with tools) → Tool Calls?
+                                                    ↓
+                                            handle_tool_calls()
+                                                    ↓
+                                            Pushover Notification
+                                                    ↓
+AI Response → evaluate() → Pass? → Return to User
+                            ↓ Fail
+                        rerun() → Improved Response
 ```
 
 ## Customization
 
-- **To represent a different individual**:  
-  Replace the `me/profile_summary.pdf` and `me/summary.txt` with the relevant person's information.  
+- **To represent a different individual**:
+  Replace the `me/profile_summary.pdf` and `me/summary.txt` with the relevant person's information.
   Update the `self.name` attribute in the `Me` class.
 
-- **Adding More Tools**:  
+- **Adding More Tools**:
   You can expand the `tools` list following the included schema to integrate additional functionality.
 
 ## Hugging Face Deployed Version 
