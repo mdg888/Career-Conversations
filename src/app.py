@@ -7,10 +7,16 @@ import requests                  # Make HTTP requests for notifications
 from pypdf import PdfReader      # Extract text from PDF files
 import gradio as gr              # Web interface framework
 from pydantic import BaseModel   # Data validation for structured outputs
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database.question_db import QuestionDB  # Database for unknown questions
 
 # Load environment variables and initialize OpenAI client
 load_dotenv(override=True)
 openai = OpenAI()
+
+# Initialize database for storing unknown questions
+question_db = QuestionDB()
 
 # Send push notifications via Pushover service
 def push(text):
@@ -36,6 +42,14 @@ def record_unknown_question(question):
     """Log unanswered questions to identify knowledge gaps"""
     # Alert Michael about questions that couldn't be answered
     push(f"{question} it appears I don't know how to answer that")
+
+    # Save question to database
+    question_db.add_question(
+        question_text=question,
+        category="Unknown",
+        asked_by="website_visitor"
+    )
+
     return {"status": "success"}
 
 # OpenAI function calling schema for recording user contact info
@@ -222,11 +236,11 @@ class Me:
         # Extract the response content
         reply = response.choices[0].message.content
 
-        # Quality control: evaluate the response
+        # # Quality control: evaluate the response
         evaluation = self.evaluate(reply, message, history)
+        
         if not evaluation.is_acceptable:
             # Response failed quality check - regenerate with feedback
-            print("eval")
             print(evaluation.feedback)
             reply = self.rerun(reply, message, history, evaluation.feedback)
 
