@@ -2,6 +2,12 @@
 
 A multi-tenant SaaS platform where anyone can upload their own documents and generate an AI chatbot that represents them — answering questions about their background, experience, and expertise.
 
+## Screenshots
+
+| Chat | Documents | Settings | Unknown Questions |
+|------|-----------|----------|-------------------|
+| ![Chat interface](assets/home_page.png) | ![Admin documents tab](assets/admin_tab.png) | ![Settings tab](assets/settings_tab.png) | ![Unanswered questions](assets/unanswered_questions.png) |
+
 ## What It Does
 
 - **Multi-chatbot management** — Create and manage multiple chatbots, each with their own documents, settings, and chat history.
