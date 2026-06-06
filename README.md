@@ -4,9 +4,31 @@ A multi-tenant SaaS platform where anyone can upload their own documents and gen
 
 ## Screenshots
 
-| Chat | Documents | Settings | Unknown Questions |
-|------|-----------|----------|-------------------|
-| ![Chat interface](assets/home_page.png) | ![Admin documents tab](assets/admin_tab.png) | ![Settings tab](assets/settings_tab.png) | ![Unanswered questions](assets/unanswered_questions.png) |
+### Home Page
+The landing screen when no chatbots have been created yet. The dark sidebar lists all your chatbots and includes a **+ New Chatbot** button to get started.
+
+![Home page — no chatbots yet](assets/home_page.png)
+
+---
+
+### Admin — Documents Tab
+The Documents tab inside the Admin panel. This is where you upload files to build the chatbot's knowledge base. Supported formats include PDF, DOCX, TXT, MD, and images. Each document shows its processing status — once marked **ready**, the chatbot can retrieve from it during conversations.
+
+![Admin panel — Documents tab showing an uploaded resume](assets/admin_tab.png)
+
+---
+
+### Admin — Settings Tab
+The Settings tab lets you configure the chatbot's name, description, tone, greeting message, fallback message (shown when the bot can't answer), and the underlying OpenAI model. The Danger Zone at the bottom allows permanent deletion of the chatbot and all its data.
+
+![Admin panel — Settings tab with chatbot configuration form](assets/settings_tab.png)
+
+---
+
+### Admin — Unknown Questions Tab
+The Unknown Questions tab logs every question a visitor asked that the chatbot couldn't answer from its knowledge base. Each entry shows the question and the timestamp. This gives you a clear view of gaps in your uploaded content so you can add more documents to address them.
+
+![Admin panel — Unknown Questions tab showing an unanswered question](assets/unanswered_questions.png)
 
 ## What It Does
 
