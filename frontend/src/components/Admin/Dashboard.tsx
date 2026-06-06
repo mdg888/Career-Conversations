@@ -52,7 +52,7 @@ export default function Dashboard({ chatbot, onChatbotUpdated, onChatbotDeleted 
       </div>
 
       {tab === 'documents' && <DocumentUpload chatbot={chatbot} />}
-      {tab === 'settings' && <ChatbotSettings chatbot={chatbot} onUpdated={onChatbotUpdated} onDeleted={onChatbotDeleted} />}
+      {tab === 'settings' && <ChatbotSettings key={chatbot.id} chatbot={chatbot} onUpdated={onChatbotUpdated} onDeleted={onChatbotDeleted} />}
       {tab === 'contacts' && <ContactCaptures chatbotId={chatbot.id} />}
       {tab === 'questions' && (
         <div>
