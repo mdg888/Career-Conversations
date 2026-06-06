@@ -126,22 +126,18 @@ export default function App() {
               </div>
             </div>
 
-            {/* Content */}
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              {view === 'chat'
-                ? <ChatInterface chatbot={selected} />
-                : (
-                  <div style={{ padding: '1.5rem', overflowY: 'auto', height: '100%', boxSizing: 'border-box' }}>
-                    <Dashboard
-                      chatbot={selected}
-                      onChatbotUpdated={updated => {
-                        setSelected(updated)
-                        setChatbots(prev => prev.map(b => b.id === updated.id ? updated : b))
-                      }}
-                    />
-                  </div>
-                )
-              }
+            {/* Content — both views stay mounted so chat history survives tab switches */}
+            <div style={{ flex: 1, overflow: 'hidden', display: view === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <ChatInterface chatbot={selected} />
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', display: view === 'admin' ? 'block' : 'none', padding: '1.5rem', boxSizing: 'border-box' }}>
+              <Dashboard
+                chatbot={selected}
+                onChatbotUpdated={updated => {
+                  setSelected(updated)
+                  setChatbots(prev => prev.map(b => b.id === updated.id ? updated : b))
+                }}
+              />
             </div>
           </>
         ) : (
