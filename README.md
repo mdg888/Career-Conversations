@@ -4,6 +4,13 @@ A multi-tenant SaaS platform where anyone can upload their own documents and gen
 
 ## Screenshots
 
+### Chat Interface
+The main chat view where visitors interact with the chatbot. The bot greets the user, answers questions using only the uploaded knowledge base, and responds in a conversational style. User messages appear on the right in blue, and the bot's responses on the left. A text input and Send button sit at the bottom. The Chat / Admin toggle in the top right switches between talking to the bot and managing it.
+
+![Chat interface — mid-conversation about Michael's projects](assets/chat_component.png)
+
+---
+
 ### Home Page
 The landing screen when no chatbots have been created yet. The dark sidebar lists all your chatbots and includes a **+ New Chatbot** button to get started.
 
