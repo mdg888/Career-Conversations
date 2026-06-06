@@ -1,6 +1,8 @@
+import shutil
 from fastapi import APIRouter, HTTPException, Depends
 from backend.src.models.chatbot import ChatbotCreate, ChatbotUpdate, ChatbotResponse
 from backend.src.services.config_service import ConfigService
+from backend.src.core.config import settings
 
 router = APIRouter(prefix="/api/chatbots", tags=["chatbots"])
 
@@ -39,3 +41,6 @@ def update_chatbot(chatbot_id: str, data: ChatbotUpdate, service: ConfigService 
 def delete_chatbot(chatbot_id: str, service: ConfigService = Depends(get_config_service)):
     if not service.delete_chatbot(chatbot_id):
         raise HTTPException(status_code=404, detail="Chatbot not found")
+    user_dir = settings.data_dir / "users" / chatbot_id
+    if user_dir.exists():
+        shutil.rmtree(user_dir)

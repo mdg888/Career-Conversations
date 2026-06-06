@@ -4,12 +4,13 @@ import { api, Chatbot } from '../../services/api'
 interface Props {
   chatbot: Chatbot
   onUpdated: (updated: Chatbot) => void
+  onDeleted: () => void
 }
 
 const TONES = ['professional', 'friendly', 'casual', 'formal', 'concise']
 const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo']
 
-export default function ChatbotSettings({ chatbot, onUpdated }: Props) {
+export default function ChatbotSettings({ chatbot, onUpdated, onDeleted }: Props) {
   const [form, setForm] = useState({
     name: chatbot.name,
     description: chatbot.description ?? '',
@@ -21,9 +22,23 @@ export default function ChatbotSettings({ chatbot, onUpdated }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }))
+
+  const deleteChatbot = async () => {
+    setDeleting(true)
+    try {
+      await api.chatbots.delete(chatbot.id)
+      onDeleted()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Delete failed')
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -83,6 +98,34 @@ export default function ChatbotSettings({ chatbot, onUpdated }: Props) {
       >
         {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save Changes'}
       </button>
+
+      <div style={{ marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid #fee2e2' }}>
+        <h4 style={{ marginTop: 0, color: '#991b1b' }}>Danger Zone</h4>
+        {confirmDelete ? (
+          <div>
+            <p style={{ color: '#7f1d1d', marginTop: 0 }}>
+              This will permanently delete <strong>{chatbot.name}</strong> and all its documents, chat history, and embeddings. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={deleteChatbot}
+                disabled={deleting}
+                style={{ padding: '0.6rem 1.2rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+              >{deleting ? 'Deleting…' : 'Yes, delete permanently'}</button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                style={{ padding: '0.6rem 1.2rem', background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+              >Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            style={{ padding: '0.6rem 1.2rem', background: 'white', color: '#dc2626', border: '1px solid #dc2626', borderRadius: '8px', cursor: 'pointer' }}
+          >Delete this chatbot</button>
+        )}
+      </div>
     </div>
   )
 }

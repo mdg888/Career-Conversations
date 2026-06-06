@@ -189,6 +189,15 @@ export default function App() {
                   setSelected(updated)
                   setChatbots(prev => prev.map(b => b.id === updated.id ? updated : b))
                 }}
+                onChatbotDeleted={() => {
+                  const id = selected.id
+                  const remaining = chatbots.filter(b => b.id !== id)
+                  setChatbots(remaining)
+                  setChatStates(prev => { const next = { ...prev }; delete next[id]; return next })
+                  setChatLoading(prev => { const next = { ...prev }; delete next[id]; return next })
+                  setSelected(remaining[0] ?? null)
+                  setView('chat')
+                }}
               />
             </div>
           </>

@@ -7,11 +7,12 @@ import ContactCaptures from './ContactCaptures'
 interface Props {
   chatbot: Chatbot
   onChatbotUpdated: (updated: Chatbot) => void
+  onChatbotDeleted: () => void
 }
 
 type Tab = 'documents' | 'settings' | 'contacts' | 'questions'
 
-export default function Dashboard({ chatbot, onChatbotUpdated }: Props) {
+export default function Dashboard({ chatbot, onChatbotUpdated, onChatbotDeleted }: Props) {
   const [tab, setTab] = useState<Tab>('documents')
   const [unknownQuestions, setUnknownQuestions] = useState<{ id: string; question: string; asked_at: string }[]>([])
 
@@ -51,7 +52,7 @@ export default function Dashboard({ chatbot, onChatbotUpdated }: Props) {
       </div>
 
       {tab === 'documents' && <DocumentUpload chatbot={chatbot} />}
-      {tab === 'settings' && <ChatbotSettings chatbot={chatbot} onUpdated={onChatbotUpdated} />}
+      {tab === 'settings' && <ChatbotSettings chatbot={chatbot} onUpdated={onChatbotUpdated} onDeleted={onChatbotDeleted} />}
       {tab === 'contacts' && <ContactCaptures chatbotId={chatbot.id} />}
       {tab === 'questions' && (
         <div>
