@@ -1,31 +1,31 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { api, ChatMessage, Chatbot } from '../../services/api'
 import MessageBubble from './MessageBubble'
 import SourceCitations from './SourceCitations'
 
-interface Props {
-  chatbot: Chatbot
-}
-
-interface DisplayMessage {
+export interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
   sources?: string[]
 }
 
-export default function ChatInterface({ chatbot }: Props) {
-  const [messages, setMessages] = useState<DisplayMessage[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [sessionId, setSessionId] = useState<string | undefined>()
-  const [error, setError] = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+interface Props {
+  chatbot: Chatbot
+  messages: DisplayMessage[]
+  sessionId: string | undefined
+  onMessagesChange: (updater: (prev: DisplayMessage[]) => DisplayMessage[]) => void
+  onSessionIdChange: (id: string) => void
+  loading: boolean
+  onLoadingChange: (v: boolean) => void
+}
 
-  useEffect(() => {
-    if (chatbot.greeting) {
-      setMessages([{ role: 'assistant', content: chatbot.greeting }])
-    }
-  }, [chatbot.id, chatbot.greeting])
+export default function ChatInterface({
+  chatbot, messages, sessionId,
+  onMessagesChange, onSessionIdChange,
+  loading, onLoadingChange,
+}: Props) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -34,24 +34,27 @@ export default function ChatInterface({ chatbot }: Props) {
   const history: ChatMessage[] = messages.map(m => ({ role: m.role, content: m.content }))
 
   const send = async () => {
-    const text = input.trim()
+    const text = inputRef.current?.value.trim()
     if (!text || loading) return
-    setInput('')
-    setError(null)
-    setMessages(prev => [...prev, { role: 'user', content: text }])
-    setLoading(true)
+    inputRef.current!.value = ''
+
+    onMessagesChange(prev => [...prev, { role: 'user', content: text }])
+    onLoadingChange(true)
     try {
       const resp = await api.chat(chatbot.id, text, history, sessionId)
-      setSessionId(resp.session_id)
-      setMessages(prev => [...prev, {
+      onSessionIdChange(resp.session_id)
+      onMessagesChange(prev => [...prev, {
         role: 'assistant',
         content: resp.reply,
         sources: resp.sources,
       }])
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      onMessagesChange(prev => [...prev, {
+        role: 'assistant',
+        content: e instanceof Error ? `Error: ${e.message}` : 'Something went wrong.',
+      }])
     } finally {
-      setLoading(false)
+      onLoadingChange(false)
     }
   }
 
@@ -64,18 +67,12 @@ export default function ChatInterface({ chatbot }: Props) {
             {m.sources && m.sources.length > 0 && <SourceCitations sources={m.sources} />}
           </div>
         ))}
-        {loading && (
-          <div style={{ color: '#888', padding: '0.5rem' }}>Thinking…</div>
-        )}
-        {error && (
-          <div style={{ color: 'red', padding: '0.5rem' }}>{error}</div>
-        )}
+        {loading && <div style={{ color: '#888', padding: '0.5rem' }}>Thinking…</div>}
         <div ref={bottomRef} />
       </div>
       <div style={{ display: 'flex', padding: '1rem', borderTop: '1px solid #eee', gap: '0.5rem' }}>
         <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
+          ref={inputRef}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
           placeholder={`Ask ${chatbot.name}…`}
           disabled={loading}
@@ -86,15 +83,13 @@ export default function ChatInterface({ chatbot }: Props) {
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim()}
+          disabled={loading}
           style={{
             padding: '0.75rem 1.5rem', borderRadius: '8px',
             background: '#2563eb', color: 'white',
             border: 'none', cursor: 'pointer', fontSize: '1rem',
           }}
-        >
-          Send
-        </button>
+        >Send</button>
       </div>
     </div>
   )

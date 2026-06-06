@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import { api, Chatbot } from './services/api'
-import ChatInterface from './components/Chat/ChatInterface'
+import ChatInterface, { DisplayMessage } from './components/Chat/ChatInterface'
 import Dashboard from './components/Admin/Dashboard'
 
 type View = 'chat' | 'admin'
+
+interface ChatState {
+  messages: DisplayMessage[]
+  sessionId: string | undefined
+}
 
 export default function App() {
   const [chatbots, setChatbots] = useState<Chatbot[]>([])
@@ -13,6 +18,8 @@ export default function App() {
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [chatStates, setChatStates] = useState<Record<string, ChatState>>({})
+  const [chatLoading, setChatLoading] = useState<Record<string, boolean>>({})
 
   const loadBots = () =>
     api.chatbots.list()
@@ -25,6 +32,18 @@ export default function App() {
 
   useEffect(() => { loadBots() }, [])
 
+  useEffect(() => {
+    if (!selected) return
+    setChatStates(prev => {
+      if (prev[selected.id]) return prev
+      const greeting = selected.greeting || `Hi! I'm ${selected.name}. How can I help you?`
+      return {
+        ...prev,
+        [selected.id]: { messages: [{ role: 'assistant', content: greeting }], sessionId: undefined },
+      }
+    })
+  }, [selected?.id])
+
   const createBot = async () => {
     if (!newName.trim()) return
     const bot = await api.chatbots.create({ name: newName.trim() })
@@ -36,6 +55,31 @@ export default function App() {
   }
 
   if (loading) return <div style={{ padding: '2rem', color: '#6b7280' }}>Loading…</div>
+
+  const chatState = selected
+    ? (chatStates[selected.id] ?? { messages: [], sessionId: undefined })
+    : null
+  const isChatLoading = selected ? (chatLoading[selected.id] ?? false) : false
+
+  const handleMessagesChange = (updater: (prev: DisplayMessage[]) => DisplayMessage[]) => {
+    if (!selected) return
+    const id = selected.id
+    setChatStates(prev => ({
+      ...prev,
+      [id]: { ...prev[id], messages: updater(prev[id]?.messages ?? []) },
+    }))
+  }
+
+  const handleSessionIdChange = (sessionId: string) => {
+    if (!selected) return
+    const id = selected.id
+    setChatStates(prev => ({ ...prev, [id]: { ...prev[id], sessionId } }))
+  }
+
+  const handleLoadingChange = (v: boolean) => {
+    if (!selected) return
+    setChatLoading(prev => ({ ...prev, [selected.id]: v }))
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'system-ui, sans-serif' }}>
@@ -128,7 +172,15 @@ export default function App() {
 
             {/* Content — both views stay mounted so chat history survives tab switches */}
             <div style={{ flex: 1, overflow: 'hidden', display: view === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <ChatInterface chatbot={selected} />
+              <ChatInterface
+                chatbot={selected}
+                messages={chatState?.messages ?? []}
+                sessionId={chatState?.sessionId}
+                onMessagesChange={handleMessagesChange}
+                onSessionIdChange={handleSessionIdChange}
+                loading={isChatLoading}
+                onLoadingChange={handleLoadingChange}
+              />
             </div>
             <div style={{ flex: 1, overflowY: 'auto', display: view === 'admin' ? 'block' : 'none', padding: '1.5rem', boxSizing: 'border-box' }}>
               <Dashboard
