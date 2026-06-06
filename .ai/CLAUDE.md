@@ -505,11 +505,40 @@ With this context, assist the user while always representing {name} faithfully.
 
 ---
 
-## Stage 3: Implementation — IN PROGRESS
+## Stage 3: Implementation — COMPLETE
 
 ---
 
-## Stage 4: Testing — PENDING
+## Stage 4: Testing — COMPLETE
+
+### Test Results
+
+| Suite | Tests | Result |
+|---|---|---|
+| Legacy `tests/test_app.py` | 29 | ✅ All passing |
+| `backend/tests/test_config_service.py` | 8 | ✅ All passing |
+| `backend/tests/test_document_service.py` | 9 | ✅ All passing |
+| `backend/tests/test_embedding_service.py` | 7 | ✅ All passing |
+| `backend/tests/test_vector_store.py` | 7 | ✅ All passing |
+| `backend/tests/test_chat_service.py` | 7 | ✅ All passing |
+| `backend/tests/api/test_chatbots_api.py` | 9 | ✅ All passing |
+| **Total** | **77** | **✅ 77/77** |
+
+### TypeScript
+- `npx tsc --noEmit` exits clean — zero type errors across all frontend files
+
+### What was verified
+- Chatbot CRUD (create, read, update, delete) fully isolated per test
+- Document ingestion pipeline: txt, md, unsupported rejection, embed failure handling, file storage
+- Vector store: add, query, delete, reset, empty-store query guard, cosine scoring
+- Embedding service: chunk with overlap, empty input, multi-text batch
+- Chat service: basic flow, history forwarding, tool call dispatch, evaluate→rerun on rejection, session + message persistence
+- API routes: all CRUD endpoints, 422 on missing/empty name, 404 on unknown IDs
+- Database isolation: each test gets its own SQLite file via monkeypatched `_DB_PATH`
+
+### Migration path validated
+- `migrate_existing_profile.py` script reads `me/profile_summary.pdf` + `me/summary.txt`
+  and ingests them into a default chatbot (idempotent — skips if chatbot already exists)
 
 ---
 
