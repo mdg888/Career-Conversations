@@ -47,3 +47,14 @@ htmlcov/
 .DS_Store
 Thumbs.db
 nul
+
+# Database files
+*.db
+*.sqlite3
+
+# ChromaDB persistent data
+backend/data/
+
+# Frontend build output
+frontend/dist/
+frontend/node_modules/

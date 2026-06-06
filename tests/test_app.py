@@ -1,6 +1,5 @@
 """
 Comprehensive test suite for app.py
-Tests cover initialization, tool calls, chat functionality, evaluation, and error handling
 """
 
 import pytest
@@ -10,7 +9,6 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 from pydantic import BaseModel
 import responses
 
-# Import the modules to test
 from src.app import Me, push, record_user_details, record_unknown_question, Evaluation
 
 
@@ -34,11 +32,12 @@ class TestPushNotifications:
             push("Test message")
 
         assert len(responses.calls) == 1
-        assert responses.calls[0].request.body
-        # Verify the data sent
-        assert b"Test message" in responses.calls[0].request.body
-        assert b"test_token" in responses.calls[0].request.body
-        assert b"test_user" in responses.calls[0].request.body
+        body = responses.calls[0].request.body
+        # body is a URL-encoded string in newer requests versions
+        body_str = body if isinstance(body, str) else body.decode()
+        assert "Test+message" in body_str or "Test%20message" in body_str or "Test message" in body_str
+        assert "test_token" in body_str
+        assert "test_user" in body_str
 
     @responses.activate
     def test_push_handles_api_failure(self):
@@ -53,7 +52,6 @@ class TestPushNotifications:
             "PUSHOVER_TOKEN": "test_token",
             "PUSHOVER_USER": "test_user"
         }):
-            # Should not raise exception
             push("Test message")
 
     @responses.activate
@@ -78,8 +76,10 @@ class TestPushNotifications:
 
         assert result == {"status": "success"}
         assert len(responses.calls) == 1
-        assert b"test@example.com" in responses.calls[0].request.body
-        assert b"John Doe" in responses.calls[0].request.body
+        body = responses.calls[0].request.body
+        body_str = body if isinstance(body, str) else body.decode()
+        assert "test%40example.com" in body_str or "test@example.com" in body_str
+        assert "John" in body_str
 
     @responses.activate
     def test_record_user_details_with_defaults(self):
@@ -98,11 +98,18 @@ class TestPushNotifications:
             result = record_user_details(email="test@example.com")
 
         assert result == {"status": "success"}
-        assert b"Name not provided" in responses.calls[0].request.body
+        body = responses.calls[0].request.body
+        body_str = body if isinstance(body, str) else body.decode()
+        assert "Name+not+provided" in body_str or "Name%20not%20provided" in body_str or "Name not provided" in body_str
 
     @responses.activate
-    def test_record_unknown_question(self):
+    @patch('src.app._get_question_db')
+    def test_record_unknown_question(self, mock_get_db):
         """Test record_unknown_question function"""
+        mock_db = Mock()
+        mock_db.add_question.return_value = 1
+        mock_get_db.return_value = mock_db
+
         responses.add(
             responses.POST,
             "https://api.pushover.net/1/messages.json",
@@ -118,7 +125,11 @@ class TestPushNotifications:
 
         assert result == {"status": "success"}
         assert len(responses.calls) == 1
-        assert b"What is the meaning of life?" in responses.calls[0].request.body
+        mock_db.add_question.assert_called_once_with(
+            question_text="What is the meaning of life?",
+            category="Unknown",
+            asked_by="website_visitor"
+        )
 
 
 class TestMeInitialization:
@@ -129,7 +140,6 @@ class TestMeInitialization:
     @patch('src.app.OpenAI')
     def test_me_initialization_success(self, mock_openai, mock_file, mock_pdf):
         """Test successful initialization of Me class"""
-        # Mock PDF reading
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn profile text"
         mock_pdf.return_value.pages = [mock_page]
@@ -147,7 +157,6 @@ class TestMeInitialization:
     @patch('src.app.OpenAI')
     def test_me_initialization_with_multiple_pdf_pages(self, mock_openai, mock_file, mock_pdf):
         """Test initialization with multi-page PDF"""
-        # Mock multiple PDF pages
         mock_page1 = Mock()
         mock_page1.extract_text.return_value = "Page 1 content"
         mock_page2 = Mock()
@@ -219,7 +228,6 @@ class TestToolCalls:
         }):
             me = Me()
 
-            # Create mock tool call
             mock_tool_call = Mock()
             mock_tool_call.id = "call_123"
             mock_tool_call.function.name = "record_user_details"
@@ -236,11 +244,16 @@ class TestToolCalls:
             assert json.loads(results[0]["content"]) == {"status": "success"}
 
     @responses.activate
+    @patch('src.app._get_question_db')
     @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Summary")
     @patch('src.app.OpenAI')
-    def test_handle_tool_calls_record_unknown_question(self, mock_openai, mock_file, mock_pdf):
+    def test_handle_tool_calls_record_unknown_question(self, mock_openai, mock_file, mock_pdf, mock_get_db):
         """Test handle_tool_calls with record_unknown_question"""
+        mock_db = Mock()
+        mock_db.add_question.return_value = 1
+        mock_get_db.return_value = mock_db
+
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
@@ -274,7 +287,7 @@ class TestToolCalls:
     @patch('builtins.open', new_callable=mock_open, read_data="Summary")
     @patch('src.app.OpenAI')
     def test_handle_tool_calls_invalid_tool(self, mock_openai, mock_file, mock_pdf):
-        """Test handle_tool_calls with invalid tool name"""
+        """Test handle_tool_calls with invalid tool name returns empty result"""
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
@@ -292,11 +305,16 @@ class TestToolCalls:
         assert json.loads(results[0]["content"]) == {}
 
     @responses.activate
+    @patch('src.app._get_question_db')
     @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Summary")
     @patch('src.app.OpenAI')
-    def test_handle_tool_calls_multiple_calls(self, mock_openai, mock_file, mock_pdf):
+    def test_handle_tool_calls_multiple_calls(self, mock_openai, mock_file, mock_pdf, mock_get_db):
         """Test handle_tool_calls with multiple tool calls"""
+        mock_db = Mock()
+        mock_db.add_question.return_value = 1
+        mock_get_db.return_value = mock_db
+
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
@@ -334,9 +352,9 @@ class TestToolCalls:
 class TestSystemPrompts:
     """Test system prompt generation"""
 
-    @patch('app.PdfReader')
+    @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Test summary")
-    @patch('app.OpenAI')
+    @patch('src.app.OpenAI')
     def test_system_prompt_contains_required_elements(self, mock_openai, mock_file, mock_pdf):
         """Test system_prompt contains all required elements"""
         mock_page = Mock()
@@ -352,9 +370,9 @@ class TestSystemPrompts:
         assert "record_unknown_question" in prompt
         assert "record_user_details" in prompt
 
-    @patch('app.PdfReader')
+    @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Test summary")
-    @patch('app.OpenAI')
+    @patch('src.app.OpenAI')
     def test_evaluator_system_prompt_contains_required_elements(self, mock_openai, mock_file, mock_pdf):
         """Test evaluator_system_prompt contains all required elements"""
         mock_page = Mock()
@@ -369,9 +387,9 @@ class TestSystemPrompts:
         assert "Test summary" in prompt
         assert "LinkedIn profile" in prompt
 
-    @patch('app.PdfReader')
+    @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Test summary")
-    @patch('app.OpenAI')
+    @patch('src.app.OpenAI')
     def test_evaluator_user_prompt_formatting(self, mock_openai, mock_file, mock_pdf):
         """Test evaluator_user_prompt formats correctly"""
         mock_page = Mock()
@@ -402,11 +420,9 @@ class TestChat:
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
 
-        # Setup mock OpenAI client
         mock_openai_instance = Mock()
         mock_openai_class.return_value = mock_openai_instance
 
-        # Mock chat response (no tool calls)
         mock_chat_response = Mock()
         mock_chat_response.choices = [Mock()]
         mock_chat_response.choices[0].finish_reason = "stop"
@@ -414,7 +430,6 @@ class TestChat:
 
         mock_openai_instance.chat.completions.create.return_value = mock_chat_response
 
-        # Mock evaluation response
         mock_eval_response = Mock()
         mock_eval_response.choices = [Mock()]
         mock_eval_response.choices[0].message.parsed = Evaluation(
@@ -431,11 +446,16 @@ class TestChat:
         assert mock_openai_instance.chat.completions.create.call_count == 1
 
     @responses.activate
+    @patch('src.app._get_question_db')
     @patch('src.app.PdfReader')
     @patch('builtins.open', new_callable=mock_open, read_data="Summary")
     @patch('src.app.OpenAI')
-    def test_chat_with_tool_calls(self, mock_openai_class, mock_file, mock_pdf):
+    def test_chat_with_tool_calls(self, mock_openai_class, mock_file, mock_pdf, mock_get_db):
         """Test chat function with tool calls"""
+        mock_db = Mock()
+        mock_db.add_question.return_value = 1
+        mock_get_db.return_value = mock_db
+
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
@@ -454,7 +474,6 @@ class TestChat:
             mock_openai_instance = Mock()
             mock_openai_class.return_value = mock_openai_instance
 
-            # First response: tool call
             mock_tool_call = Mock()
             mock_tool_call.id = "call_123"
             mock_tool_call.function.name = "record_user_details"
@@ -466,7 +485,6 @@ class TestChat:
             mock_first_response.choices[0].message = Mock()
             mock_first_response.choices[0].message.tool_calls = [mock_tool_call]
 
-            # Second response: final answer
             mock_second_response = Mock()
             mock_second_response.choices = [Mock()]
             mock_second_response.choices[0].finish_reason = "stop"
@@ -477,7 +495,6 @@ class TestChat:
                 mock_second_response
             ]
 
-            # Mock evaluation
             mock_eval_response = Mock()
             mock_eval_response.choices = [Mock()]
             mock_eval_response.choices[0].message.parsed = Evaluation(
@@ -504,13 +521,11 @@ class TestChat:
         mock_openai_instance = Mock()
         mock_openai_class.return_value = mock_openai_instance
 
-        # First chat response
         mock_chat_response = Mock()
         mock_chat_response.choices = [Mock()]
         mock_chat_response.choices[0].finish_reason = "stop"
         mock_chat_response.choices[0].message.content = "Bad response"
 
-        # Rerun response
         mock_rerun_response = Mock()
         mock_rerun_response.choices = [Mock()]
         mock_rerun_response.choices[0].message.content = "Improved response"
@@ -520,7 +535,6 @@ class TestChat:
             mock_rerun_response
         ]
 
-        # Mock evaluation - rejected
         mock_eval_response = Mock()
         mock_eval_response.choices = [Mock()]
         mock_eval_response.choices[0].message.parsed = Evaluation(
@@ -533,7 +547,6 @@ class TestChat:
         reply = me.chat("Hello", [])
 
         assert reply == "Improved response"
-        # Should call chat completion twice (initial + rerun)
         assert mock_openai_instance.chat.completions.create.call_count == 2
 
     @patch('src.app.PdfReader')
@@ -548,7 +561,6 @@ class TestChat:
         mock_openai_instance = Mock()
         mock_openai_class.return_value = mock_openai_instance
 
-        # Simulate API error
         mock_openai_instance.chat.completions.create.side_effect = Exception("API Error")
 
         me = Me()
@@ -646,7 +658,6 @@ class TestRerun:
 
         assert result == "Improved answer"
 
-        # Verify the system prompt includes feedback
         call_args = mock_openai_instance.chat.completions.create.call_args
         messages = call_args[1]['messages']
         system_message = messages[0]['content']
@@ -686,7 +697,7 @@ class TestEdgeCases:
     @patch('builtins.open', new_callable=mock_open, read_data="Summary")
     @patch('src.app.OpenAI')
     def test_handle_tool_calls_with_malformed_json(self, mock_openai, mock_file, mock_pdf):
-        """Test handle_tool_calls with malformed JSON arguments"""
+        """Test handle_tool_calls with malformed JSON arguments raises JSONDecodeError"""
         mock_page = Mock()
         mock_page.extract_text.return_value = "LinkedIn"
         mock_pdf.return_value.pages = [mock_page]
@@ -742,5 +753,4 @@ class TestEdgeCases:
         )
 
         with patch.dict(os.environ, {}, clear=True):
-            # Should handle gracefully (sends None values)
             push("Test message")

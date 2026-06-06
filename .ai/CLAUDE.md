@@ -166,21 +166,383 @@ To turn this into a multi-user SaaS platform the following must be built:
 
 ---
 
-## Stage 2: Refactor & Migration Design — PENDING
+## Stage 2: Refactor & Migration Design — COMPLETE (approved)
 
-*Will be documented here after Stage 1 review and approval.*
+### Approved Technology Decisions
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| UI | FastAPI backend + React frontend | Full SaaS-quality interface, proper admin dashboard |
+| Notifications | Removed entirely | Replaced by admin dashboard (view contacts + unknown questions) |
+| Vector store (default) | ChromaDB | Local, zero infra, abstractions allow future swap |
+| LLM provider | OpenAI GPT-4o-mini | Already integrated, cost-effective |
+| Database | SQLite via SQLAlchemy | Zero infra for single-instance; swap path to PostgreSQL via env var |
+| Auth | None (v1) | Out of scope; architecture prepared for future addition |
 
 ---
 
-## Stage 3: Implementation — PENDING
+### Target Repository Structure
+
+```
+Career-Conversations/           ← repo root (preserved name)
+├── .ai/
+│   └── CLAUDE.md
+├── backend/
+│   ├── src/
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── main.py              # FastAPI app + router registration
+│   │   │   └── routes/
+│   │   │       ├── __init__.py
+│   │   │       ├── chat.py          # POST /api/chatbots/{id}/chat
+│   │   │       ├── chatbots.py      # CRUD /api/chatbots
+│   │   │       └── documents.py     # POST /api/chatbots/{id}/documents
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── chat_service.py      # Chat logic (refactored from Me class)
+│   │   │   ├── document_service.py  # File parsing + pipeline orchestration
+│   │   │   ├── embedding_service.py # Text chunking + OpenAI embeddings
+│   │   │   ├── ocr_service.py       # Image → text extraction
+│   │   │   ├── vector_store.py      # Abstract VectorStore + ChromaDB impl
+│   │   │   └── config_service.py    # Chatbot config load/save
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── chatbot.py           # Pydantic + ORM models for chatbots
+│   │   │   ├── document.py          # Pydantic + ORM models for documents
+│   │   │   └── chat.py              # Chat request/response models
+│   │   ├── db/
+│   │   │   ├── __init__.py
+│   │   │   ├── database.py          # SQLAlchemy engine + session factory
+│   │   │   └── migrations/          # Alembic migrations
+│   │   └── core/
+│   │       ├── __init__.py
+│   │       ├── config.py            # App-level settings (env vars)
+│   │       └── tool_registry.py     # Explicit tool registry (replaces globals())
+│   ├── data/
+│   │   └── users/
+│   │       └── {user_id}/
+│   │           └── {chatbot_id}/
+│   │               ├── documents/   # Raw uploaded files
+│   │               └── chroma/      # ChromaDB persistent collection
+│   ├── tests/
+│   │   ├── conftest.py
+│   │   ├── test_chat_service.py
+│   │   ├── test_document_service.py
+│   │   ├── test_vector_store.py
+│   │   ├── test_embedding_service.py
+│   │   └── api/
+│   │       ├── test_chat.py
+│   │       ├── test_chatbots.py
+│   │       └── test_documents.py
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Chat/
+│   │   │   │   ├── ChatInterface.tsx
+│   │   │   │   ├── MessageBubble.tsx
+│   │   │   │   └── SourceCitations.tsx
+│   │   │   └── Admin/
+│   │   │       ├── Dashboard.tsx
+│   │   │       ├── DocumentUpload.tsx
+│   │   │       ├── ChatbotSettings.tsx
+│   │   │       └── ContactCaptures.tsx
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── vite.config.ts
+├── .env.example
+├── .gitignore
+└── README.md
+```
 
 ---
 
-## Stage 4: Testing — PENDING
+### Database Schema (SQLite via SQLAlchemy, PostgreSQL-compatible)
+
+```sql
+-- Chatbots (one per profile / SaaS user in future)
+CREATE TABLE chatbots (
+    id          TEXT PRIMARY KEY,   -- UUID
+    name        TEXT NOT NULL,
+    description TEXT,
+    tone        TEXT DEFAULT 'professional',
+    greeting    TEXT,
+    fallback_message TEXT,
+    model       TEXT DEFAULT 'gpt-4o-mini',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Documents (each file uploaded to a chatbot)
+CREATE TABLE documents (
+    id          TEXT PRIMARY KEY,   -- UUID
+    chatbot_id  TEXT NOT NULL REFERENCES chatbots(id) ON DELETE CASCADE,
+    filename    TEXT NOT NULL,
+    file_type   TEXT NOT NULL,      -- pdf, txt, md, docx, png, jpg, jpeg, webp, tiff
+    file_path   TEXT NOT NULL,      -- path inside data/users/.../documents/
+    status      TEXT DEFAULT 'pending',  -- pending | processing | ready | failed
+    error       TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat sessions
+CREATE TABLE chat_sessions (
+    id          TEXT PRIMARY KEY,
+    chatbot_id  TEXT NOT NULL REFERENCES chatbots(id) ON DELETE CASCADE,
+    started_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Chat messages
+CREATE TABLE chat_messages (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+    role        TEXT NOT NULL,      -- user | assistant
+    content     TEXT NOT NULL,
+    sources     TEXT,               -- JSON array of source document names
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Contact captures (replaces record_user_details + Pushover)
+CREATE TABLE contact_captures (
+    id          TEXT PRIMARY KEY,
+    chatbot_id  TEXT NOT NULL REFERENCES chatbots(id) ON DELETE CASCADE,
+    email       TEXT NOT NULL,
+    name        TEXT,
+    notes       TEXT,
+    captured_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Unknown questions (replaces QuestionDB + Pushover)
+CREATE TABLE unknown_questions (
+    id          TEXT PRIMARY KEY,
+    chatbot_id  TEXT NOT NULL REFERENCES chatbots(id) ON DELETE CASCADE,
+    question    TEXT NOT NULL,
+    asked_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ---
 
-## Stage 5: Code Review — PENDING
+### Service Contracts
+
+#### VectorStore (abstract interface)
+```python
+class VectorStore(ABC):
+    def add_documents(self, texts: list[str], metadatas: list[dict], ids: list[str]) -> None: ...
+    def query(self, query_text: str, n_results: int = 5) -> list[QueryResult]: ...
+    def delete_documents(self, ids: list[str]) -> None: ...
+    def reset(self) -> None: ...
+```
+ChromaDB implements this. Pinecone/Weaviate/Supabase can be added later with no changes to callers.
+
+#### DocumentService
+```python
+class DocumentService:
+    def ingest(self, chatbot_id: str, file_path: Path, file_type: str) -> str:
+        # 1. Parse raw text (PDF→pypdf, DOCX→python-docx, MD→plain, images→OCR)
+        # 2. Chunk into segments (~500 tokens with 50-token overlap)
+        # 3. Embed via EmbeddingService
+        # 4. Store in VectorStore under chatbot_id namespace
+        # 5. Return document_id
+```
+
+#### EmbeddingService
+```python
+class EmbeddingService:
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
+    def chunk(self, text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]: ...
+```
+Uses `text-embedding-3-small` (cheaper than ada-002, better quality).
+
+#### ChatService (refactored from Me class)
+```python
+class ChatService:
+    def chat(self, chatbot_id: str, message: str, history: list[dict]) -> ChatResponse:
+        # 1. Load chatbot config
+        # 2. Retrieve top-k relevant chunks from VectorStore
+        # 3. Build dynamic system prompt from template + config + chunks
+        # 4. Call OpenAI with tool registry (contact capture + unknown question logging)
+        # 5. Evaluate response quality
+        # 6. Return ChatResponse with reply + sources
+```
+
+#### ToolRegistry (replaces `globals()` dispatch)
+```python
+TOOL_REGISTRY: dict[str, Callable] = {
+    "record_contact": record_contact,
+    "record_unknown_question": record_unknown_question,
+}
+# tool dispatch: TOOL_REGISTRY.get(tool_name) — no globals() risk
+```
+
+---
+
+### Dynamic System Prompt Template
+
+```
+You are an AI assistant representing {name}.
+
+{description}
+
+Answer questions using only the knowledge base context provided below.
+If the answer is not in the context, respond with: "{fallback_message}"
+
+Do not hallucinate or invent information.
+Maintain a {tone} tone throughout the conversation.
+
+If the user expresses interest in connecting or getting in touch, ask for
+their name and email using the record_contact tool.
+
+## Knowledge Base (retrieved context):
+{context}
+
+With this context, assist the user while always representing {name} faithfully.
+```
+
+---
+
+### Chatbot Config Format (chatbot_config.json per chatbot)
+
+```json
+{
+  "chatbot_id": "uuid",
+  "name": "Sarah's AI Assistant",
+  "description": "Answers questions about Sarah's professional background and projects.",
+  "tone": "professional",
+  "greeting": "Hi! I'm Sarah's AI assistant. What would you like to know?",
+  "fallback_message": "I don't have information about that. Please reach out to Sarah directly.",
+  "model": "gpt-4o-mini",
+  "max_context_chunks": 5
+}
+```
+
+---
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/chatbots` | Create new chatbot |
+| `GET` | `/api/chatbots/{id}` | Get chatbot config |
+| `PUT` | `/api/chatbots/{id}` | Update chatbot config |
+| `DELETE` | `/api/chatbots/{id}` | Delete chatbot + all data |
+| `POST` | `/api/chatbots/{id}/chat` | Send a chat message |
+| `GET` | `/api/chatbots/{id}/sessions` | List chat sessions |
+| `GET` | `/api/chatbots/{id}/sessions/{sid}/messages` | Get messages in session |
+| `POST` | `/api/chatbots/{id}/documents` | Upload a document (multipart) |
+| `GET` | `/api/chatbots/{id}/documents` | List documents |
+| `DELETE` | `/api/chatbots/{id}/documents/{doc_id}` | Delete a document |
+| `POST` | `/api/chatbots/{id}/documents/{doc_id}/rebuild` | Rebuild embeddings for one doc |
+| `GET` | `/api/chatbots/{id}/contacts` | List captured contacts |
+| `GET` | `/api/chatbots/{id}/unknown-questions` | List unanswered questions |
+
+---
+
+### Migration Strategy (incremental, no big-bang rewrite)
+
+**Phase 1 — Stabilise existing code** *(no new features)*
+- Fix broken test patches (`'app.PdfReader'` → `'src.app.PdfReader'`)
+- Replace `globals()` tool dispatch with an explicit dict registry
+- Move module-level side effects into initialisation functions
+- Add missing `QuestionDB` test coverage
+- Make current tests pass cleanly
+
+**Phase 2 — Backend foundation**
+- Add `backend/` directory structure
+- Implement SQLAlchemy models and DB setup
+- Implement `VectorStore` abstraction + ChromaDB implementation
+- Implement `EmbeddingService` (chunk + embed)
+- Implement `DocumentService` (parse PDF, TXT, MD, DOCX, images via OCR)
+- Implement `ConfigService` (load/save chatbot_config.json)
+
+**Phase 3 — ChatService**
+- Refactor `Me` class logic into `ChatService`
+- Replace hardcoded name/paths with config-driven template
+- Connect ChatService to VectorStore for RAG retrieval
+- Replace Pushover calls with DB inserts (contacts + unknown questions)
+- Preserve evaluate + rerun quality-control pattern
+
+**Phase 4 — FastAPI routes**
+- Wire up all API endpoints
+- Add file upload handling with type validation and size limits
+- Add streaming chat endpoint (`StreamingResponse`)
+
+**Phase 5 — React frontend**
+- Vite + React + TypeScript scaffold
+- Chat interface with streaming display
+- Source citations component
+- Admin dashboard: upload docs, view contacts, view unknown questions, edit config
+
+**Phase 6 — Data migration**
+- Script to migrate `me/profile_summary.pdf` and `me/summary.txt` into a default chatbot
+- Confirm existing Gradio demo can be deprecated
+
+---
+
+### Security Requirements (implementation phase)
+
+- File upload: validate MIME type + extension (allowlist only)
+- File upload: max size 20 MB per file
+- Prompt injection: user messages never interpolated into system prompt template
+- Data isolation: chatbot_id scopes all DB queries and filesystem paths
+- No `globals()` dispatch — explicit `TOOL_REGISTRY` only
+- No secrets in committed files — `.env.example` with placeholders only
+
+---
+
+### Risks Carried Forward
+
+| Risk | Mitigation in design |
+|---|---|
+| ChromaDB persistence on restart | Use `chromadb.PersistentClient(path=...)` |
+| Large document token overflow | RAG chunking limits context to top-k chunks, not full doc |
+| OCR quality for low-res images | Warn user on ingest; store raw image alongside extracted text |
+| SQLite write contention under load | Acceptable for v1; PostgreSQL swap via `DATABASE_URL` env var |
+| React build adds deploy complexity | Vite outputs static files; FastAPI serves them via `StaticFiles` |
+
+---
+
+## Stage 3: Implementation — COMPLETE
+
+---
+
+## Stage 4: Testing — COMPLETE
+
+### Test Results
+
+| Suite | Tests | Result |
+|---|---|---|
+| Legacy `tests/test_app.py` | 29 | ✅ All passing |
+| `backend/tests/test_config_service.py` | 8 | ✅ All passing |
+| `backend/tests/test_document_service.py` | 9 | ✅ All passing |
+| `backend/tests/test_embedding_service.py` | 7 | ✅ All passing |
+| `backend/tests/test_vector_store.py` | 7 | ✅ All passing |
+| `backend/tests/test_chat_service.py` | 7 | ✅ All passing |
+| `backend/tests/api/test_chatbots_api.py` | 9 | ✅ All passing |
+| **Total** | **77** | **✅ 77/77** |
+
+### TypeScript
+- `npx tsc --noEmit` exits clean — zero type errors across all frontend files
+
+### What was verified
+- Chatbot CRUD (create, read, update, delete) fully isolated per test
+- Document ingestion pipeline: txt, md, unsupported rejection, embed failure handling, file storage
+- Vector store: add, query, delete, reset, empty-store query guard, cosine scoring
+- Embedding service: chunk with overlap, empty input, multi-text batch
+- Chat service: basic flow, history forwarding, tool call dispatch, evaluate→rerun on rejection, session + message persistence
+- API routes: all CRUD endpoints, 422 on missing/empty name, 404 on unknown IDs
+- Database isolation: each test gets its own SQLite file via monkeypatched `_DB_PATH`
+
+### Migration path validated
+- `migrate_existing_profile.py` script reads `me/profile_summary.pdf` + `me/summary.txt`
+  and ingests them into a default chatbot (idempotent — skips if chatbot already exists)
+
+---
+
+## Stage 5: Code Review — COMPLETE
 
 ---
 
@@ -218,5 +580,7 @@ To turn this into a multi-user SaaS platform the following must be built:
 |----------|-----------|------|
 | Use ChromaDB as default vector store | Local, no infra needed, supports abstraction layer | Stage 2 |
 | Keep OpenAI as LLM provider | Already integrated, GPT-4o-mini is cost-effective | Stage 1 |
-| Keep Gradio for chat UI | Low friction, already working | Stage 2 |
-| Add FastAPI for admin API | Gradio alone cannot support admin dashboard | Stage 2 |
+| Switch to FastAPI + React | Full SaaS UI with admin dashboard not possible in Gradio alone | Stage 2 |
+| Remove Pushover notifications | Replaced by admin dashboard; reduces external dependencies | Stage 2 |
+| Use SQLite (SQLAlchemy) | Zero infra for v1; PostgreSQL-compatible via DATABASE_URL | Stage 2 |
+| Use text-embedding-3-small | Better quality than ada-002, lower cost | Stage 2 |
