@@ -1,185 +1,158 @@
-# Michael Di Giantomasso – Career Profile Chatbot
+# AI Profile Chatbot
 
-A professional AI chatbot designed for Michael Di Giantomasso’s website. It answers questions about Michael’s **career, background, skills, and experience**, and logs any questions it cannot answer.
+A multi-tenant SaaS platform where anyone can upload their own documents and generate an AI chatbot that represents them — answering questions about their background, experience, and expertise.
 
 ## What It Does
 
-* **Conversational AI**
-  Answers only questions related to Michael’s professional profile.
-
-* **Contact Capture**
-  Records when users want to be contacted (name, email, and notes).
-
-* **Unknown Question Logging**
-  Saves questions it can’t answer into a PostgreSQL database and sends a push notification.
-
-* **Push Notifications**
-  Uses the Pushover API for real-time alerts.
-
-* **Dynamic Context**
-  Loads Michael’s PDF and text summaries for on-brand responses.
-
-* **Quality Checks**
-  Every answer is evaluated; if it’s not good enough, the bot rewrites the response before sending it to the user.
-
-* **Simple Web Interface**
-  Built using Gradio.
+- **Multi-chatbot management** — Create and manage multiple chatbots, each with their own documents, settings, and chat history.
+- **Document ingestion** — Upload PDF, TXT, MD, and DOCX files. Content is chunked, embedded, and stored in a vector database for retrieval.
+- **RAG-powered chat** — Each response is grounded in retrieved context from the chatbot's knowledge base, with source citations.
+- **Contact capture** — Records visitor name and email when they express interest in connecting.
+- **Unknown question logging** — Saves questions the bot can't answer, visible in the admin dashboard.
+- **Quality control loop** — Every response is evaluated; if rejected, the bot rewrites before sending.
+- **Admin dashboard** — Upload documents, edit chatbot settings, view contacts, and review unanswered questions.
+- **Streaming chat** — Responses stream in real time.
 
 ## Technologies
 
-* **Python 3.8+**
-* **OpenAI API (GPT-4o-mini)**
-* **PostgreSQL + psycopg2**
-* **Gradio UI**
-* **pypdf**, **requests**, **python-dotenv**
-* **Pushover API**
-* **pytest** for testing
+- **Python 3.11+** / **FastAPI** — backend API
+- **React + TypeScript + Vite** — frontend
+- **OpenAI GPT-4o-mini** — chat + evaluation
+- **OpenAI text-embedding-3-small** — document embeddings
+- **ChromaDB** — vector store (local, persistent)
+- **SQLAlchemy + SQLite** — relational data (swappable to PostgreSQL via `DATABASE_URL`)
+- **pypdf / python-docx** — document parsing
+- **pytest** — backend test suite (77 tests)
 
 ## Getting Started
 
 ### Prerequisites
 
-* Python 3.8+
-* PostgreSQL server
-* OpenAI API key
-* Pushover API token & user key
-* Two profile files:
-
-  * `me/profile_summary.pdf`
-  * `me/summary.txt`
+- Python 3.11+
+- Node.js 18+
+- OpenAI API key
 
 ### Installation
 
 ```bash
-git clone <repo>
+git clone https://github.com/mdg888/Career-Conversations.git
 cd Career-Conversations
+```
+
+**Backend:**
+
+```bash
+cd backend
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Database Setup
+**Frontend:**
 
 ```bash
-createdb unanswered_questions
-psql unanswered_questions < database/schema.sql
+cd frontend
+npm install
 ```
 
 ### Environment Variables
 
-Create a `.env` file:
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
 
 ```
 OPENAI_API_KEY=your-key
-PUSHOVER_TOKEN=your-token
-PUSHOVER_USER=your-user-key
-DATABASE_URL=postgresql://localhost/unanswered_questions
+DATABASE_URL=sqlite:///./data/app.db   # or postgresql://...
+DATA_DIR=./data
 ```
 
 ### Run the App
 
+**Backend** (from `backend/`):
+
 ```bash
-python src/app.py
+uvicorn src.api.main:app --reload --port 8000
 ```
 
-Gradio will open at: `http://127.0.0.1:7860`
+**Frontend** (from `frontend/`):
+
+```bash
+npm run dev
+```
+
+Frontend runs at `http://localhost:5173`, backend API at `http://localhost:8000`.
+
+### Docker
+
+```bash
+docker-compose up --build
+```
+
+App available at `http://localhost:8000`.
+
+### Migrate Existing Profile (optional)
+
+If you have a `me/profile_summary.pdf` and `me/summary.txt` from the original single-person chatbot, run:
+
+```bash
+python migrate_existing_profile.py
+```
+
+This creates a default chatbot and ingests those files (idempotent — safe to run multiple times).
 
 ### Run Tests
 
 ```bash
+cd backend
 pytest
 pytest --cov=src
 ```
-
-## How the Chatbot Works
-
-1. User asks a question in the Gradio interface.
-2. The bot uses Michael’s profile data to answer.
-3. If the question is off-topic or unknown, the bot logs it and triggers a Pushover alert.
-4. The answer goes through an automatic quality check.
-5. If rejected, the bot rewrites the answer and sends the improved version.
 
 ## Project Structure
 
 ```
 Career-Conversations/
-|-- me/                     # Profile documents
-|-- src/                    # Main chatbot code
-|-- database/               # DB schema + operations
-|-- tests/                  # Test suite
-|-- requirements.txt
-|-- README.md
+├── backend/
+│   ├── src/
+│   │   ├── api/          # FastAPI routes (chatbots, chat, documents)
+│   │   ├── services/     # ChatService, DocumentService, EmbeddingService, VectorStore
+│   │   ├── models/       # Pydantic + ORM models
+│   │   ├── db/           # SQLAlchemy engine + session
+│   │   └── core/         # Config, tool registry
+│   ├── tests/            # 77 tests
+│   └── requirements.txt
+├── frontend/
+│   └── src/
+│       ├── components/
+│       │   ├── Chat/     # ChatInterface, MessageBubble, SourceCitations
+│       │   └── Admin/    # Dashboard, DocumentUpload, ChatbotSettings, ContactCaptures
+│       └── services/     # API client
+├── .env.example
+├── docker-compose.yml
+└── migrate_existing_profile.py
 ```
 
-## Key Components
+## API Reference
 
-### **QuestionDB**
-
-Handles storing and retrieving unknown questions from PostgreSQL:
-
-* Add/Search/Delete questions
-* Get stats by category
-* Full-text search support
-
-### **Tool Functions**
-
-* `record_user_details` – save contact details + send notification
-* `record_unknown_question` – log unknown questions + alert
-
-### **Me Class**
-
-Main chatbot engine:
-
-* Loads profile data
-* Builds system prompts
-* Handles OpenAI function calling
-* Evaluates and reruns responses
-* Powers the chat flow used by Gradio
-
-## Customization
-
-To adapt this chatbot for another person:
-
-1. Replace files in the `me/` directory.
-2. Update the name in the `Me` class.
-
-To add new tools, create a function, define its JSON schema, and add it to the tools list.
-
-## Deployment
-
-### Hugging Face Spaces
-
-Live demo: **[https://huggingface.co/spaces/mdg8888/career_conversation](https://huggingface.co/spaces/mdg8888/career_conversation)**
-
-### Local or Server Deployment
-
-Just run:
-
-```bash
-python src/app.py
-```
-
-Optional (production):
-
-```bash
-gunicorn src.app:app
-```
-
-### Docker (Optional)
-
-```bash
-docker build -t career-chatbot .
-docker run -p 7860:7860 --env-file .env career-chatbot
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/chatbots` | Create chatbot |
+| `GET` | `/api/chatbots/{id}` | Get chatbot |
+| `PUT` | `/api/chatbots/{id}` | Update chatbot |
+| `DELETE` | `/api/chatbots/{id}` | Delete chatbot + all data |
+| `POST` | `/api/chatbots/{id}/chat` | Send a message |
+| `POST` | `/api/chatbots/{id}/documents` | Upload a document |
+| `GET` | `/api/chatbots/{id}/documents` | List documents |
+| `DELETE` | `/api/chatbots/{id}/documents/{doc_id}` | Delete document |
+| `GET` | `/api/chatbots/{id}/contacts` | List captured contacts |
+| `GET` | `/api/chatbots/{id}/unknown-questions` | List unanswered questions |
 
 ## Troubleshooting
 
-* **Database issues**: Ensure PostgreSQL is running and `DATABASE_URL` is correct.
-* **OpenAI errors**: Check API key and usage limits.
-* **Pushover issues**: Validate token and user key.
-* **PDF errors**: Ensure the summary files exist and are readable.
-
-## Contact
-
-**Michael Di Giantomasso**
-Chatbot link: [https://huggingface.co/spaces/mdg8888/career_conversation](https://huggingface.co/spaces/mdg8888/career_conversation)
+- **OpenAI errors** — check `OPENAI_API_KEY` and usage limits.
+- **ChromaDB errors** — ensure `DATA_DIR` is writable.
+- **Database errors** — check `DATABASE_URL` and that the data directory exists.
+- **Document processing fails** — only PDF, TXT, MD, and DOCX are supported (max 20 MB).
